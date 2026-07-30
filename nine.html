@@ -106,8 +106,14 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       </div>
     </div>
 
+    <!-- 이어서 풀기 전용 버튼 (세션이 있을 때만 표시) -->
+    <div id="continue-wrap" class="hidden">
+      <button class="btn btn-primary" style="background:#059669;" id="btn-continue" onclick="continueQuiz()">이어서 풀기</button>
+    </div>
+
     <!-- 세션 설정 카드 -->
     <div class="card">
+      <div class="card-title">새 세션 설정</div>
       <div class="input-row">
         <span class="input-label" id="lbl-start-num">시작 문제 번호 (1 ~ 707)</span>
         <input type="number" id="inp-start" class="input-field" value="1" min="1" max="707">
@@ -122,8 +128,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       </div>
     </div>
 
-    <!-- 정주행 버튼 (이어서 풀기 / 새 세션) -->
-    <button class="btn btn-primary" id="btn-start-main" onclick="startOrContinueQuiz()">새 세션 시작하기</button>
+    <button class="btn btn-secondary" id="btn-start-new" onclick="startQuiz()">새 세션 시작하기</button>
 
     <div id="missed-start-wrap" class="hidden">
       <button class="btn btn-secondary" id="btn-missed-start" onclick="startMissedOnly()">오답만 풀기 (<span id="missed-count">0</span>문제)</button>
@@ -194,7 +199,7 @@ var STATS_KEY = 'aws_sap_stats';
 var SESSION_KEY = 'aws_sap_session';
 var MISSED_KEY = 'aws_sap_missed';
 
-var activeSession = null; // 현재 진행 중인 세션 메모리
+var activeSession = null;
 var selectedOpts = [];
 
 function getStats() {
@@ -232,13 +237,17 @@ function removeMissed(qIdx) {
   }
 }
 
-// ★ 핵심: 'normal' 모드일 때만 로컬스토리지 세션 저장
+// ★ 세션 저장 함수 (normal 모드일 때만 로컬스토리지에 저장)
 function saveSession() {
-  if (!activeSession || activeSession.mode !== 'normal') return;
-  localStorage.setItem(SESSION_KEY, JSON.stringify(activeSession));
+  if (activeSession && activeSession.mode === 'normal') {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(activeSession));
+  }
 }
 
 function showHome() {
+  // ★ 이전 화면 눌러서 홈으로 올 때, 현재 퀴즈 풀이 상태가 있다면 즉시 로컬스토리지에 보존
+  saveSession();
+
   document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
   document.getElementById('s-home').classList.add('active');
   
@@ -257,7 +266,7 @@ function showHome() {
   document.getElementById('home-prog-txt').innerText = solvedCount + ' / ' + totalCount + ' 완료';
   document.getElementById('home-prog-pct').innerText = pct + '%';
 
-  // 오답 목록 표시
+  // 오답 목록
   var missed = getMissedIndices();
   var missedWrap = document.getElementById('missed-start-wrap');
   if (missed.length > 0) {
@@ -267,36 +276,41 @@ function showHome() {
     missedWrap.classList.add('hidden');
   }
 
-  // ★ 저장된 정주행 세션 체크 및 버튼 텍스트 변경
+  // ★ 저장된 정주행 세션 존재 시 [이어서 풀기] 초록색 버튼 노출
   var saved = localStorage.getItem(SESSION_KEY);
-  var btnStart = document.getElementById('btn-start-main');
+  var continueWrap = document.getElementById('continue-wrap');
   if (saved) {
     var savedSession = JSON.parse(saved);
     if (savedSession && savedSession.cur < savedSession.qIndices.length) {
-      btnStart.innerText = '이어서 풀기 (' + (savedSession.cur + 1) + ' / ' + savedSession.qIndices.length + ' 문제)';
+      continueWrap.classList.remove('hidden');
+      var realQNum = savedSession.qIndices[savedSession.cur] + 1;
+      document.getElementById('btn-continue').innerText = '이어서 풀기 (현재 ' + realQNum + '번 / ' + (savedSession.cur + 1) + '번째 진행 중)';
     } else {
-      btnStart.innerText = '새 세션 시작하기';
+      continueWrap.classList.add('hidden');
     }
   } else {
-    btnStart.innerText = '새 세션 시작하기';
+    continueWrap.classList.add('hidden');
   }
 }
 
-// 홈에서 메인 버튼 클릭 시 (이어풀기 or 새로 시작)
-function startOrContinueQuiz() {
+// 이어서 풀기 버튼
+function continueQuiz() {
   var saved = localStorage.getItem(SESSION_KEY);
   if (saved) {
-    var savedSession = JSON.parse(saved);
-    if (savedSession && savedSession.cur < savedSession.qIndices.length) {
-      activeSession = savedSession;
-      renderQuiz();
+    activeSession = JSON.parse(saved);
+    renderQuiz();
+  }
+}
+
+// 새 세션 시작
+function startQuiz() {
+  var saved = localStorage.getItem(SESSION_KEY);
+  if (saved) {
+    if (!confirm('진행 중이던 기존 세션이 삭제되고 새 세션이 시작됩니다. 계속하시겠습니까?')) {
       return;
     }
   }
-  startQuiz();
-}
 
-function startQuiz() {
   var total = ALL_Q.length;
   var start = parseInt(document.getElementById('inp-start').value, 10) - 1;
   var count = parseInt(document.getElementById('inp-count').value, 10);
@@ -341,7 +355,7 @@ function startMissedOnly() {
 
   var isInstant = document.getElementById('chk-instant').checked;
 
-  // ★ 오답 모드는 mode: 'missed'로 구별되어 정주행 세션을 망치지 않음
+  // 오답노트는 'missed' 모드로 정주행 세션 스토리지에 절대로 영향을 주지 않음
   activeSession = {
     mode: 'missed',
     qIndices: missed,
@@ -453,6 +467,9 @@ function checkAnswer() {
     addMissed(qIdx);
   }
 
+  // ★ 정/오답 판정 시점마다 정주행 세션 상태 로컬스토리지에 최신화
+  saveSession();
+
   if (activeSession.instant) {
     for (var i = 0; i < q.opts.length; i++) {
       var el = document.getElementById('opt-' + i);
@@ -486,7 +503,7 @@ function checkAnswer() {
 
 function nextQ() {
   activeSession.cur++;
-  saveSession(); // ★ 다음 문제 넘어갈 때 세션 인덱스 저장
+  saveSession(); // 다음 문제 넘어가면 cur 번호 보존
 
   if (activeSession.cur < activeSession.qIndices.length) {
     renderQuiz();
@@ -508,6 +525,7 @@ function showResult() {
   document.getElementById('r-ok').innerText = score;
   document.getElementById('r-ng').innerText = total - score;
 
+  // 세션이 완전히 끝나야만 세션 데이터 삭제
   if (activeSession.mode === 'normal') {
     localStorage.removeItem(SESSION_KEY);
   }
