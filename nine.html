@@ -558,14 +558,25 @@ function copyToClipboard() {
   var qIdx = activeSession.qIndices[activeSession.cur];
   var q = ALL_Q[qIdx];
   
-  var text = '[AWS SAP 문제 ' + (qIdx + 1) + '번]\n' + q.q;
+  // 1. 문제 헤더 및 본문 작성
+  var text = '[AWS SAP 문제 ' + (qIdx + 1) + '번]\n' + q.q + '\n\n';
 
-  navigator.clipboard.writeText(text).then(function() {
-    alert('문제 내용이 복사되었습니다.');
+  // 2. 보기(A, B, C, D...) 추가
+  if (q.opts && q.opts.length > 0) {
+    q.opts.forEach(function(optText, i) {
+      var letter = String.fromCharCode(65 + i); // 0 -> A, 1 -> B, 2 -> C...
+      text += letter + '. ' + optText + '\n';
+    });
+  }
+
+  // 3. 클립보드 복사 실행
+  navigator.clipboard.writeText(text.trim()).then(function() {
+    alert('문제와 보기가 복사되었습니다.');
   }).catch(function() {
     alert('복사에 실패했습니다.');
   });
 }
+
 
 showHome();
 </script>
