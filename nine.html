@@ -15,7 +15,7 @@
   --radius:10px;
 }
 html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;color:var(--text)}
-body{display:flex;flex-direction:column;align-items:center;padding:0}
+body{display:flex;flex-direction:column;align-items:center;padding:0;overscroll-behavior-y:none;}
 #wrap{width:100%;max-width:480px;padding:16px;display:flex;flex-direction:column;gap:14px;min-height:100svh}
 .screen{display:none;flex-direction:column;gap:14px}
 .screen.active{display:flex}
@@ -33,11 +33,11 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .toggle-label{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--text);cursor:pointer}
 .toggle-label input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
 
-/* 버튼 클릭 피드백 강화 */
-.btn{width:100%;padding:14px;border-radius:var(--radius);border:none;font-size:16px;font-weight:600;cursor:pointer;transition:transform 0.1s ease, opacity 0.1s ease;font-family:inherit}
-.btn:active{transform:scale(0.94);opacity:0.8;} /* 눌렸을 때 더 작아지고 살짝 투명해지도록 개선 */
+/* ★ 버튼 눌림 애니메이션 강화 (더 빠르고 확실하게) */
+.btn{width:100%;padding:14px;border-radius:var(--radius);border:none;font-size:16px;font-weight:600;cursor:pointer;transition:transform 0.05s ease, filter 0.05s ease;font-family:inherit}
+.btn:active, .btn.pressed {transform:scale(0.93); filter:brightness(0.8);}
 .btn-primary{background:var(--accent);color:#fff}
-.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none!important;filter:none!important}
 .btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}
 .btn-danger-outline{background:transparent;color:#f87171;border:1px solid #7f1d1d}
 
@@ -54,8 +54,10 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .q-text{font-size:18px;font-weight:600;color:var(--text);line-height:1.55}
 .q-hint{font-size:13px;color:var(--text2);margin-top:7px}
 .opts{display:flex;flex-direction:column;gap:9px}
-.opt{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--surface);transition:border-color .12s,background .12s;user-select:none}
-.opt:hover{border-color:var(--border-strong)}
+
+/* ★ 보기(옵션) 눌림 애니메이션 추가 */
+.opt{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--surface);transition:transform 0.05s ease, border-color .12s, background .12s;user-select:none}
+.opt:active, .opt.pressed {transform:scale(0.97); background:var(--border);}
 .opt.sel{border-color:var(--accent);background:var(--accent-bg)}
 .opt.ok{border-color:var(--success-border);background:var(--success-bg)}
 .opt.ng{border-color:var(--danger-border);background:var(--danger-bg)}
@@ -82,10 +84,11 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
 .topbar-title{font-size:18px;font-weight:700;color:var(--text)}
-.topbar-back{font-size:14px;color:var(--accent);cursor:pointer;padding:4px 0}
+.topbar-back{font-size:14px;color:var(--accent);cursor:pointer;padding:4px 0;transition:opacity 0.1s;}
+.topbar-back:active, .topbar-back.pressed {opacity:0.5;}
 </style>
 </head>
-<body>
+<body ontouchstart="">
 <div id="wrap">
 
   <!-- HOME -->
@@ -116,7 +119,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
     <div class="card">
       <div class="card-title">새 세션 설정</div>
       <div class="input-row">
-        <span class="input-label" id="lbl-start-num">시작 문제 번호 (1 ~ 707)</span>
+        <span class="input-label" id="lbl-start-num">시작 문제 번호</span>
         <input type="number" id="inp-start" class="input-field" value="1" min="1" max="707">
       </div>
       <div class="input-row">
@@ -196,9 +199,34 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 <script src="questions.js"></script>
 
 <script>
+// ★ iOS 터치 피드백 강제 적용 스크립트 추가 ★
+document.addEventListener('touchstart', function(e) {
+  var target = e.target.closest('.btn, .opt, .topbar-back');
+  if (target && !target.disabled) {
+    target.classList.add('pressed');
+  }
+}, {passive: true});
+
+document.addEventListener('touchend', function(e) {
+  var target = e.target.closest('.btn, .opt, .topbar-back');
+  if (target) {
+    target.classList.remove('pressed');
+  }
+}, {passive: true});
+
+document.addEventListener('touchcancel', function(e) {
+  var target = e.target.closest('.btn, .opt, .topbar-back');
+  if (target) {
+    target.classList.remove('pressed');
+  }
+}, {passive: true});
+// ==========================================
+
 var STATS_KEY = 'aws_sap_stats';
 var SESSION_KEY = 'aws_sap_session';
 var MISSED_KEY = 'aws_sap_missed';
+var NEXT_START_KEY = 'aws_sap_next_start'; 
+var SESSION_COUNT_KEY = 'aws_sap_session_count'; 
 
 var activeSession = null;
 var selectedOpts = [];
@@ -250,7 +278,6 @@ function showHome() {
   document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
   document.getElementById('s-home').classList.add('active');
   
-  // 홈 화면 올 때 항상 스크롤 맨 위로
   window.scrollTo(0, 0);
   
   var totalCount = (typeof ALL_Q !== 'undefined') ? ALL_Q.length : 0;
@@ -258,6 +285,21 @@ function showHome() {
   document.getElementById('lbl-start-num').innerText = '시작 문제 번호 (1 ~ ' + totalCount + ')';
   document.getElementById('inp-start').max = totalCount;
   document.getElementById('inp-count').max = totalCount;
+
+  var savedNextStart = localStorage.getItem(NEXT_START_KEY);
+  var savedSessionCount = localStorage.getItem(SESSION_COUNT_KEY);
+
+  if (savedNextStart) {
+    var parsedNext = parseInt(savedNextStart, 10);
+    if (parsedNext > totalCount) parsedNext = 1; 
+    document.getElementById('inp-start').value = parsedNext;
+  } else {
+    document.getElementById('inp-start').value = 1;
+  }
+
+  if (savedSessionCount) {
+    document.getElementById('inp-count').value = savedSessionCount;
+  }
 
   var stats = getStats();
   var solvedCount = Object.keys(stats).length;
@@ -309,16 +351,24 @@ function startQuiz() {
   }
 
   var total = ALL_Q.length;
-  var start = parseInt(document.getElementById('inp-start').value, 10) - 1;
   var count = parseInt(document.getElementById('inp-count').value, 10);
+  if (isNaN(count) || count < 1) count = 10;
+  localStorage.setItem(SESSION_COUNT_KEY, count); 
+
+  var rawStart = parseInt(document.getElementById('inp-start').value, 10);
+  if (isNaN(rawStart) || rawStart < 1) rawStart = 1;
+  if (rawStart > total) rawStart = total;
+
   var isRandom = document.getElementById('chk-random').checked;
   var isInstant = document.getElementById('chk-instant').checked;
 
-  if (isNaN(start) || start < 0) start = 0;
-  if (start >= total) start = total - 1;
-  if (isNaN(count) || count < 1) count = 10;
+  if (!isRandom) {
+    localStorage.setItem(NEXT_START_KEY, rawStart);
+  }
 
+  var start = rawStart - 1;
   var indices = [];
+
   if (isRandom) {
     for (var i = 0; i < total; i++) indices.push(i);
     for (var i = indices.length - 1; i > 0; i--) {
@@ -339,6 +389,7 @@ function startQuiz() {
     cur: 0,
     score: 0,
     instant: isInstant,
+    isRandom: isRandom, 
     userAnswers: {}
   };
 
@@ -358,6 +409,7 @@ function startMissedOnly() {
     cur: 0,
     score: 0,
     instant: isInstant,
+    isRandom: false,
     userAnswers: {}
   };
 
@@ -365,7 +417,6 @@ function startMissedOnly() {
 }
 
 function renderQuiz() {
-  // ★ 새로운 문제를 렌더링할 때 항상 화면 최상단으로 스크롤 이동
   window.scrollTo({ top: 0, behavior: 'auto' });
 
   document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
@@ -466,6 +517,14 @@ function checkAnswer() {
     addMissed(qIdx);
   }
 
+  if (activeSession.mode === 'normal' && !activeSession.isRandom) {
+    var currentQNum = qIdx + 1; 
+    var savedNext = parseInt(localStorage.getItem(NEXT_START_KEY) || '1', 10);
+    if (currentQNum >= savedNext) {
+      localStorage.setItem(NEXT_START_KEY, currentQNum + 1);
+    }
+  }
+
   saveSession();
 
   if (activeSession.instant) {
@@ -511,7 +570,6 @@ function nextQ() {
 }
 
 function showResult() {
-  // 결과 화면에서도 맨 위로 스크롤 이동
   window.scrollTo(0, 0);
 
   document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
@@ -548,6 +606,8 @@ function resetAllProgress() {
     localStorage.removeItem(STATS_KEY);
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(MISSED_KEY);
+    localStorage.removeItem(NEXT_START_KEY); 
+    localStorage.removeItem(SESSION_COUNT_KEY); 
     activeSession = null;
     showHome();
   }
