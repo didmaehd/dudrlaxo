@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>AWS SAP 문제풀기</title>
+<!-- ★ 질문 데이터 먼저 안전하게 로드 -->
+<script src="questions.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -23,7 +25,6 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px}
 .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border)}
 
-/* 홈 카드 내부 스타일 */
 .card-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px}
 .input-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .input-label{font-size:14px;color:var(--text)}
@@ -33,11 +34,11 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .toggle-label{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--text);cursor:pointer}
 .toggle-label input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
 
-/* 버튼 클릭 피드백 강화 */
-.btn{width:100%;padding:14px;border-radius:var(--radius);border:none;font-size:16px;font-weight:600;cursor:pointer;transition:transform 0.1s ease, opacity 0.1s ease;font-family:inherit}
-.btn:active{transform:scale(0.94);opacity:0.8;}
+/* 버튼 클릭 피드백 강하게 (iOS 대응: 강제 클래스 포함) */
+.btn{width:100%;padding:14px;border-radius:var(--radius);border:none;font-size:16px;font-weight:600;cursor:pointer;transition:transform 0.1s ease, opacity 0.1s ease;font-family:inherit;-webkit-appearance:none;}
+.btn:active, .btn.btn-pressed { transform:scale(0.94) !important; opacity:0.8 !important; }
 .btn-primary{background:var(--accent);color:#fff}
-.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none !important;}
 .btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}
 .btn-danger-outline{background:transparent;color:#f87171;border:1px solid #7f1d1d}
 
@@ -54,11 +55,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .q-text{font-size:18px;font-weight:600;color:var(--text);line-height:1.55}
 .q-hint{font-size:13px;color:var(--text2);margin-top:7px}
 .opts{display:flex;flex-direction:column;gap:9px}
-.opt{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--surface);transition:border-color .12s,background .12s;user-select:none}
+
+/* 보기(A, B, C, D) 버튼 눌림 효과 */
+.opt{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--surface);transition:transform 0.1s ease, border-color 0.12s, background 0.12s;user-select:none;-webkit-user-select:none;}
+.opt:active{transform:scale(0.97);opacity:0.9;}
 .opt:hover{border-color:var(--border-strong)}
 .opt.sel{border-color:var(--accent);background:var(--accent-bg)}
 .opt.ok{border-color:var(--success-border);background:var(--success-bg)}
 .opt.ng{border-color:var(--danger-border);background:var(--danger-bg)}
+
 .opt-num{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:600;color:var(--text2);margin-top:1px}
 .opt.sel .opt-num{background:var(--accent);border-color:var(--accent);color:#fff}
 .opt.ok .opt-num{background:var(--success);border-color:var(--success);color:#fff}
@@ -85,7 +90,6 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .topbar-back{font-size:14px;color:var(--accent);cursor:pointer;padding:4px 0}
 </style>
 </head>
-<!-- ★ 아이폰 버튼 눌림 감각 해결을 위한 빈 터치 이벤트(ontouchstart) 속성 추가 -->
 <body ontouchstart="">
 <div id="wrap">
 
@@ -93,27 +97,25 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
   <div class="screen active" id="s-home">
     <div class="topbar">
       <span class="topbar-title">AWS SAP 문제풀기</span>
-      <span class="badge" id="total-badge">707문제</span>
+      <span class="badge" id="total-badge">0문제</span>
     </div>
 
-    <!-- 전체 학습 진행률 -->
     <div class="card">
       <div class="card-title">전체 학습 진행률</div>
       <div class="prog-wrap">
         <div class="prog-bar"><div class="prog-fill" id="home-prog-fill"></div></div>
         <div class="prog-meta">
-          <span id="home-prog-txt">0 / 707 완료</span>
+          <span id="home-prog-txt">0 / 0 완료</span>
           <span id="home-prog-pct">0%</span>
         </div>
       </div>
     </div>
 
-    <!-- 이어서 풀기 전용 버튼 -->
+    <!-- 버튼마다 pressEffect 강제 부여 -->
     <div id="continue-wrap" class="hidden">
-      <button class="btn btn-primary" style="background:#059669;" id="btn-continue" onclick="continueQuiz()">이어서 풀기</button>
+      <button class="btn btn-primary" style="background:#059669;" id="btn-continue" onclick="pressEffect(this); setTimeout(continueQuiz, 150)">이어서 풀기</button>
     </div>
 
-    <!-- 세션 설정 카드 -->
     <div class="card">
       <div class="card-title">새 세션 설정</div>
       <div class="input-row">
@@ -130,18 +132,17 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       </div>
     </div>
 
-    <button class="btn btn-secondary" id="btn-start-new" onclick="startQuiz()">새 세션 시작하기</button>
+    <button class="btn btn-secondary" id="btn-start-new" onclick="pressEffect(this); setTimeout(startQuiz, 150)">새 세션 시작하기</button>
 
     <div id="missed-start-wrap" class="hidden">
-      <button class="btn btn-secondary" id="btn-missed-start" onclick="startMissedOnly()">오답만 풀기 (<span id="missed-count">0</span>문제)</button>
+      <button class="btn btn-secondary" id="btn-missed-start" onclick="pressEffect(this); setTimeout(startMissedOnly, 150)">오답만 풀기 (<span id="missed-count">0</span>문제)</button>
     </div>
 
-    <!-- 초기화 메뉴 -->
     <div class="reset-box">
       <div class="reset-title">초기화 메뉴</div>
       <div class="btn-row">
-        <button class="btn btn-secondary" style="flex:1" onclick="resetCurrentSession()">세션 초기화</button>
-        <button class="btn btn-danger-outline" style="flex:1" onclick="resetAllProgress()">전체 기록 초기화</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="pressEffect(this); setTimeout(resetCurrentSession, 150)">세션 초기화</button>
+        <button class="btn btn-danger-outline" style="flex:1" onclick="pressEffect(this); setTimeout(resetAllProgress, 150)">전체 기록 초기화</button>
       </div>
     </div>
   </div>
@@ -149,7 +150,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
   <!-- QUIZ -->
   <div class="screen" id="s-quiz">
     <div class="topbar">
-      <span class="topbar-back" onclick="showHome()">이전 화면</span>
+      <span class="topbar-back" onclick="setTimeout(showHome, 150)">이전 화면</span>
       <span id="score-live" style="font-size:14px;color:var(--text2)"></span>
     </div>
     <div class="prog-wrap">
@@ -164,14 +165,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
     <div class="opts" id="opts"></div>
     <div class="feedback" id="fb"></div>
     
-    <!-- 하단 버튼 -->
+    <!-- 문제 화면 핵심 버튼 -->
     <div class="btn-row">
       <div class="btn-copy-wrap">
-        <button class="btn btn-secondary" id="btn-copy" onclick="copyToClipboard()">복사</button>
+        <!-- 복사는 즉시 실행되어야 iOS가 차단하지 않음 -->
+        <button class="btn btn-secondary" id="btn-copy" onclick="pressEffect(this); copyToClipboard()">복사</button>
       </div>
       <div class="btn-action-wrap">
-        <button class="btn btn-primary" id="btn-check" onclick="checkAnswer()" disabled>확인</button>
-        <button class="btn btn-primary hidden" id="btn-next" onclick="nextQ()">다음</button>
+        <button class="btn btn-primary" id="btn-check" onclick="pressEffect(this); setTimeout(checkAnswer, 150)" disabled>확인</button>
+        <button class="btn btn-primary hidden" id="btn-next" onclick="pressEffect(this); setTimeout(nextQ, 150)">다음</button>
       </div>
     </div>
   </div>
@@ -186,25 +188,31 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       <div class="stat"><div class="stat-val" id="r-ng"></div><div class="stat-lbl">오답</div></div>
     </div>
     <div class="btn-row" style="margin-top:10px">
-      <button class="btn btn-secondary" onclick="showHome()">홈으로</button>
-      <button class="btn btn-primary" id="btn-retry" onclick="retryMissed()">오답만 다시풀기</button>
+      <button class="btn btn-secondary" onclick="pressEffect(this); setTimeout(showHome, 150)">홈으로</button>
+      <button class="btn btn-primary" id="btn-retry" onclick="pressEffect(this); setTimeout(retryMissed, 150)">오답만 다시풀기</button>
     </div>
   </div>
 
 </div>
 
-<!-- external question data -->
-<script src="questions.js"></script>
-
 <script>
 var STATS_KEY = 'aws_sap_stats';
 var SESSION_KEY = 'aws_sap_session';
 var MISSED_KEY = 'aws_sap_missed';
-var NEXT_START_KEY = 'aws_sap_next_start'; // ★ 진도 기억용 Key 추가
-var SESSION_COUNT_KEY = 'aws_sap_session_count'; // ★ 문제 수 기억용 Key 추가
+var NEXT_START_KEY = 'aws_sap_next_start';
+var SESSION_COUNT_KEY = 'aws_sap_session_count';
 
 var activeSession = null;
 var selectedOpts = [];
+
+// ★ 버튼을 강제로 눌린 상태(클래스)로 만들어 눈에 띄게 하는 핵심 함수
+function pressEffect(el) {
+  if (el.disabled) return; // 비활성화 상태면 무시
+  el.classList.add('btn-pressed');
+  setTimeout(function() {
+    el.classList.remove('btn-pressed');
+  }, 150); // 0.15초 뒤에 원래대로 복구
+}
 
 function getStats() {
   var raw = localStorage.getItem(STATS_KEY);
@@ -255,19 +263,20 @@ function showHome() {
   
   window.scrollTo(0, 0);
   
-  var totalCount = (typeof ALL_Q !== 'undefined') ? ALL_Q.length : 0;
+  var totalCount = (typeof ALL_Q !== 'undefined' && ALL_Q) ? ALL_Q.length : 0;
   document.getElementById('total-badge').innerText = totalCount + '문제';
-  document.getElementById('lbl-start-num').innerText = '시작 문제 번호 (1 ~ ' + totalCount + ')';
-  document.getElementById('inp-start').max = totalCount;
-  document.getElementById('inp-count').max = totalCount;
+  document.getElementById('lbl-start-num').innerText = '시작 문제 번호 (1 ~ ' + (totalCount || 1) + ')';
+  if (totalCount > 0) {
+    document.getElementById('inp-start').max = totalCount;
+    document.getElementById('inp-count').max = totalCount;
+  }
 
-  // ★ 이전에 저장된 시작 번호 및 문제 개수 복원
   var savedNextStart = localStorage.getItem(NEXT_START_KEY);
   var savedSessionCount = localStorage.getItem(SESSION_COUNT_KEY);
 
   if (savedNextStart) {
     var parsedNext = parseInt(savedNextStart, 10);
-    if (parsedNext > totalCount) parsedNext = 1; // 끝까지 도달했으면 1번으로 리셋
+    if (parsedNext > totalCount && totalCount > 0) parsedNext = 1;
     document.getElementById('inp-start').value = parsedNext;
   } else {
     document.getElementById('inp-start').value = 1;
@@ -319,6 +328,11 @@ function continueQuiz() {
 }
 
 function startQuiz() {
+  if (typeof ALL_Q === 'undefined' || !ALL_Q || ALL_Q.length === 0) {
+    alert('문제 데이터(questions.js)를 불러오지 못했습니다.');
+    return;
+  }
+
   var saved = localStorage.getItem(SESSION_KEY);
   if (saved) {
     if (!confirm('진행 중이던 기존 세션이 삭제되고 새 세션이 시작됩니다. 계속하시겠습니까?')) {
@@ -329,7 +343,7 @@ function startQuiz() {
   var total = ALL_Q.length;
   var count = parseInt(document.getElementById('inp-count').value, 10);
   if (isNaN(count) || count < 1) count = 10;
-  localStorage.setItem(SESSION_COUNT_KEY, count); // 세션 문제 수 저장
+  localStorage.setItem(SESSION_COUNT_KEY, count);
 
   var rawStart = parseInt(document.getElementById('inp-start').value, 10);
   if (isNaN(rawStart) || rawStart < 1) rawStart = 1;
@@ -338,12 +352,11 @@ function startQuiz() {
   var isRandom = document.getElementById('chk-random').checked;
   var isInstant = document.getElementById('chk-instant').checked;
 
-  // ★ 랜덤 모드가 아닐 때만 내가 직접 입력한 시작번호를 기준점으로 기억
   if (!isRandom) {
     localStorage.setItem(NEXT_START_KEY, rawStart);
   }
 
-  var start = rawStart - 1; // 배열 인덱스는 0부터 시작하므로 -1
+  var start = rawStart - 1;
   var indices = [];
 
   if (isRandom) {
@@ -366,7 +379,7 @@ function startQuiz() {
     cur: 0,
     score: 0,
     instant: isInstant,
-    isRandom: isRandom, // 랜덤 여부 기억 (진도 계산 분리용)
+    isRandom: isRandom,
     userAnswers: {}
   };
 
@@ -494,11 +507,9 @@ function checkAnswer() {
     addMissed(qIdx);
   }
 
-  // ★ [핵심] 순차 정주행(normal && !isRandom)일 때만 다음 문제 번호 기억
   if (activeSession.mode === 'normal' && !activeSession.isRandom) {
-    var currentQNum = qIdx + 1; // 사용자가 방금 푼 문제의 실제 번호 (1-based)
+    var currentQNum = qIdx + 1;
     var savedNext = parseInt(localStorage.getItem(NEXT_START_KEY) || '1', 10);
-    // 이전에 푼 번호보다 진도가 더 나갔을 때만 최고기록 갱신 (과거 복습 시 역행 방지)
     if (currentQNum >= savedNext) {
       localStorage.setItem(NEXT_START_KEY, currentQNum + 1);
     }
@@ -585,8 +596,8 @@ function resetAllProgress() {
     localStorage.removeItem(STATS_KEY);
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(MISSED_KEY);
-    localStorage.removeItem(NEXT_START_KEY); // 진도 기록도 삭제
-    localStorage.removeItem(SESSION_COUNT_KEY); // 세션 설정도 삭제
+    localStorage.removeItem(NEXT_START_KEY);
+    localStorage.removeItem(SESSION_COUNT_KEY);
     activeSession = null;
     showHome();
   }
@@ -607,13 +618,19 @@ function copyToClipboard() {
   }
 
   navigator.clipboard.writeText(text.trim()).then(function() {
-    alert('문제와 보기가 복사되었습니다.');
+    setTimeout(function() {
+      alert('문제와 보기가 복사되었습니다.');
+    }, 120);
   }).catch(function() {
-    alert('복사에 실패했습니다.');
+    setTimeout(function() {
+      alert('복사에 실패했습니다.');
+    }, 120);
   });
 }
 
-showHome();
+window.addEventListener('DOMContentLoaded', function() {
+  showHome();
+});
 </script>
 </body>
 </html>
