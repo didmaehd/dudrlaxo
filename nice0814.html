@@ -55,11 +55,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .q-text{font-size:18px;font-weight:600;color:var(--text);line-height:1.55}
 .q-hint{font-size:13px;color:var(--text2);margin-top:7px}
 .opts{display:flex;flex-direction:column;gap:9px}
-.opt{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--surface);transition:border-color .12s,background .12s;user-select:none;-webkit-user-select:none;}
+
+/* 보기(A, B, C, D) 버튼 애니메이션 개선 및 눌림 효과 추가 */
+.opt{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--surface);transition:transform 0.1s ease, border-color 0.12s, background 0.12s;user-select:none;-webkit-user-select:none;}
+.opt:active{transform:scale(0.97);opacity:0.9;}
 .opt:hover{border-color:var(--border-strong)}
 .opt.sel{border-color:var(--accent);background:var(--accent-bg)}
 .opt.ok{border-color:var(--success-border);background:var(--success-bg)}
 .opt.ng{border-color:var(--danger-border);background:var(--danger-bg)}
+
 .opt-num{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:600;color:var(--text2);margin-top:1px}
 .opt.sel .opt-num{background:var(--accent);border-color:var(--accent);color:#fff}
 .opt.ok .opt-num{background:var(--success);border-color:var(--success);color:#fff}
@@ -111,7 +115,8 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 
     <!-- 이어서 풀기 전용 버튼 -->
     <div id="continue-wrap" class="hidden">
-      <button class="btn btn-primary" style="background:#059669;" id="btn-continue" onclick="continueQuiz()">이어서 풀기</button>
+      <!-- 이어서 풀기 버튼에도 약간의 딜레이 추가 -->
+      <button class="btn btn-primary" style="background:#059669;" id="btn-continue" onclick="setTimeout(continueQuiz, 120)">이어서 풀기</button>
     </div>
 
     <!-- 세션 설정 카드 -->
@@ -131,18 +136,20 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       </div>
     </div>
 
-    <button class="btn btn-secondary" id="btn-start-new" onclick="startQuiz()">새 세션 시작하기</button>
+    <!-- 시작 버튼에도 약간의 딜레이 추가 -->
+    <button class="btn btn-secondary" id="btn-start-new" onclick="setTimeout(startQuiz, 120)">새 세션 시작하기</button>
 
     <div id="missed-start-wrap" class="hidden">
-      <button class="btn btn-secondary" id="btn-missed-start" onclick="startMissedOnly()">오답만 풀기 (<span id="missed-count">0</span>문제)</button>
+      <!-- 오답 버튼 딜레이 -->
+      <button class="btn btn-secondary" id="btn-missed-start" onclick="setTimeout(startMissedOnly, 120)">오답만 풀기 (<span id="missed-count">0</span>문제)</button>
     </div>
 
     <!-- 초기화 메뉴 -->
     <div class="reset-box">
       <div class="reset-title">초기화 메뉴</div>
       <div class="btn-row">
-        <button class="btn btn-secondary" style="flex:1" onclick="resetCurrentSession()">세션 초기화</button>
-        <button class="btn btn-danger-outline" style="flex:1" onclick="resetAllProgress()">전체 기록 초기화</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="setTimeout(resetCurrentSession, 120)">세션 초기화</button>
+        <button class="btn btn-danger-outline" style="flex:1" onclick="setTimeout(resetAllProgress, 120)">전체 기록 초기화</button>
       </div>
     </div>
   </div>
@@ -150,7 +157,8 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
   <!-- QUIZ -->
   <div class="screen" id="s-quiz">
     <div class="topbar">
-      <span class="topbar-back" onclick="showHome()">이전 화면</span>
+      <!-- 이전 화면 버튼 딜레이 -->
+      <span class="topbar-back" onclick="setTimeout(showHome, 120)">이전 화면</span>
       <span id="score-live" style="font-size:14px;color:var(--text2)"></span>
     </div>
     <div class="prog-wrap">
@@ -165,14 +173,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
     <div class="opts" id="opts"></div>
     <div class="feedback" id="fb"></div>
     
-    <!-- 하단 버튼 -->
+    <!-- 하단 액션 버튼 (딜레이 적용) -->
     <div class="btn-row">
       <div class="btn-copy-wrap">
+        <!-- 복사 기능 자체에 딜레이가 적용되었으므로 onclick은 그대로 -->
         <button class="btn btn-secondary" id="btn-copy" onclick="copyToClipboard()">복사</button>
       </div>
       <div class="btn-action-wrap">
-        <button class="btn btn-primary" id="btn-check" onclick="checkAnswer()" disabled>확인</button>
-        <button class="btn btn-primary hidden" id="btn-next" onclick="nextQ()">다음</button>
+        <button class="btn btn-primary" id="btn-check" onclick="setTimeout(checkAnswer, 120)" disabled>확인</button>
+        <button class="btn btn-primary hidden" id="btn-next" onclick="setTimeout(nextQ, 120)">다음</button>
       </div>
     </div>
   </div>
@@ -187,8 +196,9 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       <div class="stat"><div class="stat-val" id="r-ng"></div><div class="stat-lbl">오답</div></div>
     </div>
     <div class="btn-row" style="margin-top:10px">
-      <button class="btn btn-secondary" onclick="showHome()">홈으로</button>
-      <button class="btn btn-primary" id="btn-retry" onclick="retryMissed()">오답만 다시풀기</button>
+      <!-- 결과 화면 버튼 딜레이 -->
+      <button class="btn btn-secondary" onclick="setTimeout(showHome, 120)">홈으로</button>
+      <button class="btn btn-primary" id="btn-retry" onclick="setTimeout(retryMissed, 120)">오답만 다시풀기</button>
     </div>
   </div>
 
@@ -608,9 +618,14 @@ function copyToClipboard() {
   }
 
   navigator.clipboard.writeText(text.trim()).then(function() {
-    alert('문제와 보기가 복사되었습니다.');
+    // 팝업이 뜨기 전 눌림 효과를 눈으로 확인할 수 있도록 딜레이 추가
+    setTimeout(function() {
+      alert('문제와 보기가 복사되었습니다.');
+    }, 120);
   }).catch(function() {
-    alert('복사에 실패했습니다.');
+    setTimeout(function() {
+      alert('복사에 실패했습니다.');
+    }, 120);
   });
 }
 
