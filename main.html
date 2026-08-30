@@ -202,6 +202,24 @@ var MISSED_KEY = 'aws_sap_missed';
 var NEXT_START_KEY = 'aws_sap_next_start';
 var SESSION_COUNT_KEY = 'aws_sap_session_count';
 
+// iOS의 file:// 실행 환경에서는 localStorage 접근이 차단될 수 있다.
+// 이 경우에도 문제 풀이는 가능하도록, 현재 열려 있는 동안만 유지되는 저장소로 대체한다.
+var storage = (function() {
+  var memory = {};
+  try {
+    var testKey = '__aws_sap_storage_test__';
+    window.localStorage.setItem(testKey, '1');
+    window.localStorage.removeItem(testKey);
+    return window.localStorage;
+  } catch (e) {
+    return {
+      getItem: function(key) { return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null; },
+      setItem: function(key, value) { memory[key] = String(value); },
+      removeItem: function(key) { delete memory[key]; }
+    };
+  }
+})();
+
 var activeSession = null;
 var selectedOpts = [];
 
@@ -215,21 +233,21 @@ function pressEffect(el) {
 }
 
 function getStats() {
-  var raw = localStorage.getItem(STATS_KEY);
+  var raw = storage.getItem(STATS_KEY);
   return raw ? JSON.parse(raw) : {};
 }
 
 function saveStats(stats) {
-  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  storage.setItem(STATS_KEY, JSON.stringify(stats));
 }
 
 function getMissedIndices() {
-  var raw = localStorage.getItem(MISSED_KEY);
+  var raw = storage.getItem(MISSED_KEY);
   return raw ? JSON.parse(raw) : [];
 }
 
 function saveMissedIndices(list) {
-  localStorage.setItem(MISSED_KEY, JSON.stringify(list));
+  storage.setItem(MISSED_KEY, JSON.stringify(list));
 }
 
 function addMissed(qIdx) {
@@ -251,7 +269,7 @@ function removeMissed(qIdx) {
 
 function saveSession() {
   if (activeSession && activeSession.mode === 'normal') {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(activeSession));
+    storage.setItem(SESSION_KEY, JSON.stringify(activeSession));
   }
 }
 
@@ -271,8 +289,8 @@ function showHome() {
     document.getElementById('inp-count').max = totalCount;
   }
 
-  var savedNextStart = localStorage.getItem(NEXT_START_KEY);
-  var savedSessionCount = localStorage.getItem(SESSION_COUNT_KEY);
+  var savedNextStart = storage.getItem(NEXT_START_KEY);
+  var savedSessionCount = storage.getItem(SESSION_COUNT_KEY);
 
   if (savedNextStart) {
     var parsedNext = parseInt(savedNextStart, 10);
@@ -303,7 +321,7 @@ function showHome() {
     missedWrap.classList.add('hidden');
   }
 
-  var saved = localStorage.getItem(SESSION_KEY);
+  var saved = storage.getItem(SESSION_KEY);
   var continueWrap = document.getElementById('continue-wrap');
   if (saved) {
     var savedSession = JSON.parse(saved);
@@ -320,7 +338,7 @@ function showHome() {
 }
 
 function continueQuiz() {
-  var saved = localStorage.getItem(SESSION_KEY);
+  var saved = storage.getItem(SESSION_KEY);
   if (saved) {
     activeSession = JSON.parse(saved);
     renderQuiz();
@@ -333,7 +351,7 @@ function startQuiz() {
     return;
   }
 
-  var saved = localStorage.getItem(SESSION_KEY);
+  var saved = storage.getItem(SESSION_KEY);
   if (saved) {
     if (!confirm('진행 중이던 기존 세션이 삭제되고 새 세션이 시작됩니다. 계속하시겠습니까?')) {
       return;
@@ -343,7 +361,7 @@ function startQuiz() {
   var total = ALL_Q.length;
   var count = parseInt(document.getElementById('inp-count').value, 10);
   if (isNaN(count) || count < 1) count = 10;
-  localStorage.setItem(SESSION_COUNT_KEY, count);
+  storage.setItem(SESSION_COUNT_KEY, count);
 
   var rawStart = parseInt(document.getElementById('inp-start').value, 10);
   if (isNaN(rawStart) || rawStart < 1) rawStart = 1;
@@ -353,7 +371,7 @@ function startQuiz() {
   var isInstant = document.getElementById('chk-instant').checked;
 
   if (!isRandom) {
-    localStorage.setItem(NEXT_START_KEY, rawStart);
+    storage.setItem(NEXT_START_KEY, rawStart);
   }
 
   var start = rawStart - 1;
@@ -509,9 +527,9 @@ function checkAnswer() {
 
   if (activeSession.mode === 'normal' && !activeSession.isRandom) {
     var currentQNum = qIdx + 1;
-    var savedNext = parseInt(localStorage.getItem(NEXT_START_KEY) || '1', 10);
+    var savedNext = parseInt(storage.getItem(NEXT_START_KEY) || '1', 10);
     if (currentQNum >= savedNext) {
-      localStorage.setItem(NEXT_START_KEY, currentQNum + 1);
+      storage.setItem(NEXT_START_KEY, currentQNum + 1);
     }
   }
 
@@ -575,7 +593,7 @@ function showResult() {
   document.getElementById('r-ng').innerText = total - score;
 
   if (activeSession.mode === 'normal') {
-    localStorage.removeItem(SESSION_KEY);
+    storage.removeItem(SESSION_KEY);
   }
 }
 
@@ -585,7 +603,7 @@ function retryMissed() {
 
 function resetCurrentSession() {
   if (confirm('현재 진행중인 정주행 세션을 초기화하시겠습니까?')) {
-    localStorage.removeItem(SESSION_KEY);
+    storage.removeItem(SESSION_KEY);
     activeSession = null;
     showHome();
   }
@@ -593,11 +611,11 @@ function resetCurrentSession() {
 
 function resetAllProgress() {
   if (confirm('경고: 전체 학습 기록 및 오답 목록이 완전히 삭제됩니다. 진행하시겠습니까?')) {
-    localStorage.removeItem(STATS_KEY);
-    localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(MISSED_KEY);
-    localStorage.removeItem(NEXT_START_KEY);
-    localStorage.removeItem(SESSION_COUNT_KEY);
+    storage.removeItem(STATS_KEY);
+    storage.removeItem(SESSION_KEY);
+    storage.removeItem(MISSED_KEY);
+    storage.removeItem(NEXT_START_KEY);
+    storage.removeItem(SESSION_COUNT_KEY);
     activeSession = null;
     showHome();
   }
