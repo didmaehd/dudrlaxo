@@ -111,6 +111,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title">진행 상황 수정</div>
+      <div class="input-row">
+        <span class="input-label">완료한 문제 수</span>
+        <input type="number" id="inp-completed" class="input-field" value="0" min="0" max="707">
+      </div>
+      <button class="btn btn-secondary" onclick="pressEffect(this); setTimeout(setCompletedCount, 150)">완료 수 적용</button>
+    </div>
+
     <!-- 버튼마다 pressEffect 강제 부여 -->
     <div id="continue-wrap" class="hidden">
       <button class="btn btn-primary" style="background:#059669;" id="btn-continue" onclick="pressEffect(this); setTimeout(continueQuiz, 150)">이어서 풀기</button>
@@ -287,6 +296,7 @@ function showHome() {
   if (totalCount > 0) {
     document.getElementById('inp-start').max = totalCount;
     document.getElementById('inp-count').max = totalCount;
+    document.getElementById('inp-completed').max = totalCount;
   }
 
   var savedNextStart = storage.getItem(NEXT_START_KEY);
@@ -306,6 +316,7 @@ function showHome() {
 
   var stats = getStats();
   var solvedCount = Object.keys(stats).length;
+  document.getElementById('inp-completed').value = solvedCount;
   var pct = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0;
   
   document.getElementById('home-prog-fill').style.width = pct + '%';
@@ -607,6 +618,36 @@ function resetCurrentSession() {
     activeSession = null;
     showHome();
   }
+}
+
+function setCompletedCount() {
+  var total = (typeof ALL_Q !== 'undefined' && ALL_Q) ? ALL_Q.length : 0;
+  var completed = parseInt(document.getElementById('inp-completed').value, 10);
+
+  if (isNaN(completed) || completed < 0 || completed > total) {
+    alert('0부터 ' + total + ' 사이의 숫자를 입력해주세요.');
+    return;
+  }
+
+  if (!confirm('1번부터 ' + completed + '번까지를 완료 처리합니다. 기존 완료 및 오답 기록이 해당 기준으로 변경됩니다. 계속하시겠습니까?')) {
+    return;
+  }
+
+  var stats = {};
+  for (var i = 0; i < completed; i++) {
+    stats[i] = true;
+  }
+  saveStats(stats);
+
+  var missed = getMissedIndices().filter(function(qIdx) {
+    return qIdx >= completed;
+  });
+  saveMissedIndices(missed);
+
+  storage.removeItem(SESSION_KEY);
+  activeSession = null;
+  storage.setItem(NEXT_START_KEY, completed < total ? String(completed + 1) : '1');
+  showHome();
 }
 
 function resetAllProgress() {
