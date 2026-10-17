@@ -249,6 +249,7 @@ var MISSED_KEY = 'aws_sap_missed';
 var NEXT_START_KEY = 'aws_sap_next_start';
 var SESSION_COUNT_KEY = 'aws_sap_session_count';
 var ANSWER_OVERRIDES_KEY = 'aws_sap_answer_overrides';
+var RANDOM_DECK_KEY = 'aws_sap_random_deck';
 var SYNC_CONFIG_KEY = 'aws_sap_github_sync_config';
 var SYNC_BASE_SHA_KEY = 'aws_sap_github_sync_base_sha';
 var SYNC_BASE_DATA_KEY = 'aws_sap_github_sync_base_data';
@@ -257,6 +258,7 @@ var SYNC_BACKUP_KEY = 'aws_sap_github_sync_local_backup';
 var SYNC_DATA_PATH = 'study-progress.json';
 var syncBusy = false;
 var pendingSyncConflict = null;
+var answerEditRequiredCount = 1;
 
 // iOS의 file:// 실행 환경에서는 localStorage 접근이 차단될 수 있다.
 // 이 경우에도 문제 풀이는 가능하도록, 현재 열려 있는 동안만 유지되는 저장소로 대체한다.
@@ -295,7 +297,7 @@ function syncStatus(message) {
 
 function readProgress() {
   var data = {};
-  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY].forEach(function(key) {
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY, RANDOM_DECK_KEY].forEach(function(key) {
     var value = storage.getItem(key);
     if (value !== null) data[key] = value;
   });
@@ -303,7 +305,7 @@ function readProgress() {
 }
 
 function applyProgress(data) {
-  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY].forEach(function(key) {
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY, RANDOM_DECK_KEY].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(data, key)) window.localStorage.setItem(key, data[key]);
     else window.localStorage.removeItem(key);
   });
@@ -331,7 +333,7 @@ function applyAnswerOverrides() {
 
 function progressSignature(data) {
   var ordered = {};
-  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY].forEach(function(key) {
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY, RANDOM_DECK_KEY].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(data, key)) ordered[key] = data[key];
   });
   return JSON.stringify(ordered);
@@ -631,6 +633,45 @@ function continueQuiz() {
   }
 }
 
+function createShuffledDeck(total) {
+  var deck = [];
+  for (var i = 0; i < total; i++) deck.push(i);
+  for (var i = deck.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var temp = deck[i];
+    deck[i] = deck[j];
+    deck[j] = temp;
+  }
+  return deck;
+}
+
+function takeRandomBatch(count, total) {
+  var state = null;
+  try { state = JSON.parse(storage.getItem(RANDOM_DECK_KEY) || 'null'); } catch (e) {}
+  var valid = state && Array.isArray(state.deck) && state.deck.length === total &&
+    state.deck.every(function(idx) { return Number.isInteger(idx) && idx >= 0 && idx < total; }) &&
+    new Set(state.deck).size === total && Number.isInteger(state.next) && state.next >= 0 && state.next <= total &&
+    Number.isInteger(state.cycle) && state.cycle >= 1;
+  if (!valid || state.next >= total) {
+    state = { deck: createShuffledDeck(total), next: 0, cycle: valid ? state.cycle + 1 : 1 };
+  }
+  var start = state.next;
+  var indices = state.deck.slice(start, Math.min(start + count, total));
+  storage.setItem(RANDOM_DECK_KEY, JSON.stringify(state));
+  return { indices: indices, start: start, end: start + indices.length, cycle: state.cycle };
+}
+
+function completeRandomSession(session) {
+  if (!session || !session.isRandom || !Number.isInteger(session.randomDeckStart) || !Number.isInteger(session.randomDeckEnd)) return;
+  try {
+    var state = JSON.parse(storage.getItem(RANDOM_DECK_KEY) || 'null');
+    if (state && state.cycle === session.randomDeckCycle && state.next === session.randomDeckStart) {
+      state.next = session.randomDeckEnd;
+      storage.setItem(RANDOM_DECK_KEY, JSON.stringify(state));
+    }
+  } catch (e) {}
+}
+
 function startQuiz() {
   if (typeof ALL_Q === 'undefined' || !ALL_Q || ALL_Q.length === 0) {
     alert('문제 데이터(questions.js)를 불러오지 못했습니다.');
@@ -642,6 +683,7 @@ function startQuiz() {
     if (!confirm('진행 중이던 기존 세션이 삭제되고 새 세션이 시작됩니다. 계속하시겠습니까?')) {
       return;
     }
+    storage.removeItem(SESSION_KEY);
   }
 
   var total = ALL_Q.length;
@@ -662,16 +704,11 @@ function startQuiz() {
 
   var start = rawStart - 1;
   var indices = [];
+  var randomBatch = null;
 
   if (isRandom) {
-    for (var i = 0; i < total; i++) indices.push(i);
-    for (var i = indices.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var temp = indices[i];
-      indices[i] = indices[j];
-      indices[j] = temp;
-    }
-    indices = indices.slice(0, count);
+    randomBatch = takeRandomBatch(count, total);
+    indices = randomBatch.indices;
   } else {
     var end = Math.min(start + count, total);
     for (var i = start; i < end; i++) indices.push(i);
@@ -684,7 +721,10 @@ function startQuiz() {
     score: 0,
     instant: isInstant,
     isRandom: isRandom,
-    userAnswers: {}
+    userAnswers: {},
+    randomDeckStart: randomBatch ? randomBatch.start : null,
+    randomDeckEnd: randomBatch ? randomBatch.end : null,
+    randomDeckCycle: randomBatch ? randomBatch.cycle : null
   };
 
   saveSession();
@@ -758,13 +798,16 @@ function openAnswerEditor() {
   var qIdx = activeSession.qIndices[activeSession.cur];
   var q = ALL_Q[qIdx];
   var answers = getQuestionAnswers(qIdx);
+  answerEditRequiredCount = answers.length;
+  document.querySelector('#answer-edit-panel .card-title').innerText = '정답으로 지정할 보기 선택 (' + answerEditRequiredCount + '개)';
   var list = document.getElementById('answer-edit-options');
   list.innerHTML = '';
   q.opts.forEach(function(optionText, idx) {
     var label = document.createElement('label');
     label.className = 'answer-edit-option';
     var checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
+    checkbox.type = answerEditRequiredCount === 1 ? 'radio' : 'checkbox';
+    checkbox.name = 'answer-correction';
     checkbox.value = idx;
     checkbox.checked = answers.indexOf(idx) !== -1;
     var text = document.createElement('span');
@@ -786,7 +829,7 @@ function saveAnswerCorrection() {
   var correct = Array.prototype.slice.call(document.querySelectorAll('#answer-edit-options input:checked')).map(function(input) {
     return parseInt(input.value, 10);
   }).sort(function(a, b) { return a - b; });
-  if (!correct.length) { alert('정답 보기를 하나 이상 선택하세요.'); return; }
+  if (correct.length !== answerEditRequiredCount) { alert('정답 보기 ' + answerEditRequiredCount + '개를 선택하세요.'); return; }
   if (!confirm('문제 ' + (qIdx + 1) + '번의 정답을 ' + correct.map(function(i) { return String.fromCharCode(65 + i); }).join(', ') + '로 수정할까요? 이 문제의 기존 풀이 기록은 초기화됩니다.')) return;
 
   var overrides = getAnswerOverrides();
@@ -937,6 +980,7 @@ function showResult() {
   document.getElementById('r-ng').innerText = total - score;
 
   if (activeSession.mode === 'normal') {
+    completeRandomSession(activeSession);
     storage.removeItem(SESSION_KEY);
   }
 }
@@ -990,6 +1034,7 @@ function resetAllProgress() {
     storage.removeItem(MISSED_KEY);
     storage.removeItem(NEXT_START_KEY);
     storage.removeItem(SESSION_COUNT_KEY);
+    storage.removeItem(RANDOM_DECK_KEY);
     activeSession = null;
     showHome();
   }
