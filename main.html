@@ -116,7 +116,11 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
       <div class="card-title">기기 간 기록 동기화</div>
       <div class="input-row"><span class="input-label">GitHub 저장소 (계정/저장소)</span><input type="text" id="sync-repo" class="input-field" style="width:150px;text-align:left" value="didmaehd/dudrlaxo" autocomplete="off"></div>
       <div class="input-row"><span class="input-label">GitHub 토큰</span><input type="password" id="sync-token" class="input-field" style="width:190px;text-align:left" placeholder="Fine-grained PAT" autocomplete="off"></div>
-      <button class="btn btn-secondary" onclick="pressEffect(this); setTimeout(connectSync, 150)">저장하고 동기화</button>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="pressEffect(this); setTimeout(saveSyncSettings, 150)">설정 저장</button>
+        <button class="btn btn-secondary" onclick="pressEffect(this); setTimeout(downloadProgress, 150)">이 기기로 내려받기</button>
+      </div>
+      <button class="btn btn-primary" onclick="pressEffect(this); setTimeout(uploadProgress, 150)">이 기기 기록 올리기</button>
       <div class="sync-status">GitHub에서 fine-grained 토큰을 만들고 이 저장소만 선택한 뒤, Contents 권한을 읽기 및 쓰기로 설정하세요. 토큰은 이 기기의 브라우저에 저장되며, 이 저장소의 학습 기록 파일은 공개됩니다.</div>
       <div id="sync-status" class="sync-status">동기화 미설정</div>
     </div>
@@ -222,9 +226,7 @@ var NEXT_START_KEY = 'aws_sap_next_start';
 var SESSION_COUNT_KEY = 'aws_sap_session_count';
 var SYNC_CONFIG_KEY = 'aws_sap_github_sync_config';
 var SYNC_DATA_PATH = 'study-progress.json';
-var syncTimer = null;
 var syncBusy = false;
-var syncPending = false;
 var applyingRemote = false;
 
 // iOS의 file:// 실행 환경에서는 localStorage 접근이 차단될 수 있다.
@@ -239,11 +241,9 @@ var storage = (function() {
       getItem: function(key) { return window.localStorage.getItem(key); },
       setItem: function(key, value) {
         window.localStorage.setItem(key, value);
-        if (!applyingRemote && [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].indexOf(key) !== -1) scheduleSync();
       },
       removeItem: function(key) {
         window.localStorage.removeItem(key);
-        if (!applyingRemote && [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].indexOf(key) !== -1) scheduleSync();
       }
     };
   } catch (e) {
@@ -309,56 +309,51 @@ async function pushProgress(config, data, sha) {
   return response.json();
 }
 
-async function syncNow() {
-  var config = syncConfig();
-  if (!config || !config.token || !config.repo) return;
-  if (syncBusy) { syncPending = true; return; }
-  syncBusy = true;
-  syncStatus('GitHub에서 기록을 확인하는 중…');
-  try {
-    var remote = await pullProgress(config);
-    if (remote) {
-      applyProgress(remote.data);
-      syncStatus('동기화 완료 · ' + new Date().toLocaleTimeString());
-    } else {
-      await pushProgress(config, readProgress(), null);
-      syncStatus('새 기록 파일을 만들었습니다. 다른 기기에서도 같은 저장소와 토큰으로 연결하세요.');
-    }
-  } catch (error) {
-    syncStatus(error.message + ' · 토큰에 Contents 읽기/쓰기 권한이 있는지 확인하세요.');
-  } finally {
-    syncBusy = false;
-    if (syncPending) { syncPending = false; scheduleSync(); }
-  }
-}
-
-function scheduleSync() {
-  if (!syncConfig()) return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(async function() {
-    var config = syncConfig();
-    if (!config || syncBusy) { syncPending = true; return; }
-    syncBusy = true;
-    try {
-      var remote = await pullProgress(config);
-      await pushProgress(config, readProgress(), remote ? remote.sha : null);
-      syncStatus('동기화 완료 · ' + new Date().toLocaleTimeString());
-    } catch (error) {
-      syncStatus(error.message + ' · 저장 실패. 설정을 확인하고 다시 동기화하세요.');
-    } finally {
-      syncBusy = false;
-      if (syncPending) { syncPending = false; scheduleSync(); }
-    }
-  }, 700);
-}
-
-async function connectSync() {
+function configuredSync() {
   var repo = document.getElementById('sync-repo').value.trim();
   var token = document.getElementById('sync-token').value.trim() || (syncConfig() || {}).token;
   if (!/^[^/]+\/[^/]+$/.test(repo) || !token) { alert('저장소를 계정/저장소 형식으로 입력하고 GitHub 토큰을 붙여넣으세요.'); return; }
   var config = { repo: repo, token: token };
   window.localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
-  await syncNow();
+  document.getElementById('sync-token').value = '';
+  document.getElementById('sync-token').placeholder = '이 기기에 저장된 토큰 사용 중';
+  return config;
+}
+
+function saveSyncSettings() {
+  var config = configuredSync();
+  if (config) syncStatus('설정을 저장했습니다. 내려받기 또는 올리기를 직접 선택하세요.');
+}
+
+async function downloadProgress() {
+  var config = configuredSync();
+  if (!config || syncBusy) return;
+  syncBusy = true;
+  syncStatus('GitHub 기록을 내려받는 중…');
+  try {
+    var remote = await pullProgress(config);
+    if (!remote) syncStatus('저장소에 기록 파일이 없습니다. 먼저 기록을 올려 주세요.');
+    else {
+      applyProgress(remote.data);
+      syncStatus('내려받기 완료 · ' + new Date().toLocaleTimeString());
+    }
+  } catch (error) {
+    syncStatus(error.message + ' · 토큰의 저장소 및 Contents 권한을 확인하세요.');
+  } finally { syncBusy = false; }
+}
+
+async function uploadProgress() {
+  var config = configuredSync();
+  if (!config || syncBusy) return;
+  syncBusy = true;
+  syncStatus('이 기기의 기록을 GitHub에 올리는 중…');
+  try {
+    var remote = await pullProgress(config);
+    await pushProgress(config, readProgress(), remote ? remote.sha : null);
+    syncStatus('올리기 완료 · ' + new Date().toLocaleTimeString());
+  } catch (error) {
+    syncStatus(error.message + ' · 토큰의 저장소 및 Contents 권한을 확인하세요.');
+  } finally { syncBusy = false; }
 }
 
 var activeSession = null;
@@ -824,8 +819,7 @@ window.addEventListener('DOMContentLoaded', function() {
   if (config) {
     document.getElementById('sync-repo').value = config.repo;
     document.getElementById('sync-token').placeholder = '이 기기에 저장된 토큰 사용 중';
-    syncStatus('연결됨 · 저장할 때 자동 동기화');
-    syncNow();
+    syncStatus('설정됨 · 내려받기와 올리기를 직접 실행하세요.');
   }
   showHome();
 });
