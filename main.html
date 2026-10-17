@@ -85,6 +85,9 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 .reset-box{border:1px dashed #7f1d1d;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .reset-title{font-size:13px;font-weight:700;color:#f87171}
 .sync-status{font-size:13px;color:var(--text2);line-height:1.5;margin-top:8px}
+.answer-edit-options{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.answer-edit-option{display:flex;align-items:flex-start;gap:9px;font-size:14px;line-height:1.45;color:var(--text);cursor:pointer}
+.answer-edit-option input{margin-top:3px;accent-color:var(--accent)}
 .sync-token-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .sync-token-row .input-label{white-space:nowrap}
 .btn-small{width:auto;padding:7px 11px;font-size:13px;white-space:nowrap}
@@ -199,6 +202,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
     </div>
     <div class="opts" id="opts"></div>
     <div class="feedback" id="fb"></div>
+    <button class="btn btn-secondary" id="btn-edit-answer" onclick="pressEffect(this); setTimeout(openAnswerEditor, 150)">정답 오류 수정</button>
+    <div class="card hidden" id="answer-edit-panel">
+      <div class="card-title">정답으로 지정할 보기 선택</div>
+      <div class="answer-edit-options" id="answer-edit-options"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="closeAnswerEditor()">취소</button>
+        <button class="btn btn-primary" onclick="saveAnswerCorrection()">저장</button>
+      </div>
+    </div>
     
     <!-- 문제 화면 핵심 버튼 -->
     <div class="btn-row">
@@ -236,6 +248,7 @@ var SESSION_KEY = 'aws_sap_session';
 var MISSED_KEY = 'aws_sap_missed';
 var NEXT_START_KEY = 'aws_sap_next_start';
 var SESSION_COUNT_KEY = 'aws_sap_session_count';
+var ANSWER_OVERRIDES_KEY = 'aws_sap_answer_overrides';
 var SYNC_CONFIG_KEY = 'aws_sap_github_sync_config';
 var SYNC_BASE_SHA_KEY = 'aws_sap_github_sync_base_sha';
 var SYNC_BASE_DATA_KEY = 'aws_sap_github_sync_base_data';
@@ -282,7 +295,7 @@ function syncStatus(message) {
 
 function readProgress() {
   var data = {};
-  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].forEach(function(key) {
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY].forEach(function(key) {
     var value = storage.getItem(key);
     if (value !== null) data[key] = value;
   });
@@ -290,16 +303,35 @@ function readProgress() {
 }
 
 function applyProgress(data) {
-  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].forEach(function(key) {
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(data, key)) window.localStorage.setItem(key, data[key]);
     else window.localStorage.removeItem(key);
   });
+  applyAnswerOverrides();
   showHome();
+}
+
+function getAnswerOverrides() {
+  try { return JSON.parse(storage.getItem(ANSWER_OVERRIDES_KEY) || '{}'); } catch (e) { return {}; }
+}
+
+function getQuestionAnswers(qIdx) {
+  var overrides = getAnswerOverrides();
+  return Object.prototype.hasOwnProperty.call(overrides, qIdx) ? overrides[qIdx] : ALL_Q[qIdx].answers;
+}
+
+function applyAnswerOverrides() {
+  if (typeof ALL_Q === 'undefined') return;
+  var overrides = getAnswerOverrides();
+  Object.keys(overrides).forEach(function(rawIdx) {
+    var qIdx = parseInt(rawIdx, 10);
+    if (ALL_Q[qIdx] && Array.isArray(overrides[rawIdx])) ALL_Q[qIdx].answers = overrides[rawIdx];
+  });
 }
 
 function progressSignature(data) {
   var ordered = {};
-  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].forEach(function(key) {
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY, ANSWER_OVERRIDES_KEY].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(data, key)) ordered[key] = data[key];
   });
   return JSON.stringify(ordered);
@@ -698,7 +730,7 @@ function renderQuiz() {
   document.getElementById('q-num').innerText = '문제 ' + (qIdx + 1);
   document.getElementById('q-text').innerText = q.q;
 
-  var reqCount = q.answers.length;
+  var reqCount = getQuestionAnswers(qIdx).length;
   document.getElementById('q-hint').innerText = reqCount > 1 ? '(다중 선택 가능: ' + reqCount + '개 선택)' : '(단일 선택)';
 
   var optsHtml = '';
@@ -718,12 +750,68 @@ function renderQuiz() {
   document.getElementById('btn-check').disabled = true;
   document.getElementById('btn-check').classList.remove('hidden');
   document.getElementById('btn-next').classList.add('hidden');
+  document.getElementById('answer-edit-panel').classList.add('hidden');
+}
+
+function openAnswerEditor() {
+  if (!activeSession) return;
+  var qIdx = activeSession.qIndices[activeSession.cur];
+  var q = ALL_Q[qIdx];
+  var answers = getQuestionAnswers(qIdx);
+  var list = document.getElementById('answer-edit-options');
+  list.innerHTML = '';
+  q.opts.forEach(function(optionText, idx) {
+    var label = document.createElement('label');
+    label.className = 'answer-edit-option';
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = idx;
+    checkbox.checked = answers.indexOf(idx) !== -1;
+    var text = document.createElement('span');
+    text.innerText = String.fromCharCode(65 + idx) + '. ' + optionText;
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    list.appendChild(label);
+  });
+  document.getElementById('answer-edit-panel').classList.remove('hidden');
+}
+
+function closeAnswerEditor() {
+  document.getElementById('answer-edit-panel').classList.add('hidden');
+}
+
+function saveAnswerCorrection() {
+  if (!activeSession) return;
+  var qIdx = activeSession.qIndices[activeSession.cur];
+  var correct = Array.prototype.slice.call(document.querySelectorAll('#answer-edit-options input:checked')).map(function(input) {
+    return parseInt(input.value, 10);
+  }).sort(function(a, b) { return a - b; });
+  if (!correct.length) { alert('정답 보기를 하나 이상 선택하세요.'); return; }
+  if (!confirm('문제 ' + (qIdx + 1) + '번의 정답을 ' + correct.map(function(i) { return String.fromCharCode(65 + i); }).join(', ') + '로 수정할까요? 이 문제의 기존 풀이 기록은 초기화됩니다.')) return;
+
+  var overrides = getAnswerOverrides();
+  overrides[qIdx] = correct;
+  storage.setItem(ANSWER_OVERRIDES_KEY, JSON.stringify(overrides));
+  applyAnswerOverrides();
+
+  var stats = getStats();
+  delete stats[qIdx];
+  saveStats(stats);
+  removeMissed(qIdx);
+  if (activeSession.userAnswers && activeSession.userAnswers[qIdx] === true) activeSession.score = Math.max(0, activeSession.score - 1);
+  if (activeSession.userAnswers) delete activeSession.userAnswers[qIdx];
+  saveSession();
+
+  renderQuiz();
+  var fb = document.getElementById('fb');
+  fb.innerText = '정답을 수정했습니다. 이 문제를 다시 풀어 기록을 갱신하고, 홈 화면에서 동기화하세요.';
+  fb.className = 'feedback ok';
 }
 
 function selectOpt(idx) {
   var qIdx = activeSession.qIndices[activeSession.cur];
   var q = ALL_Q[qIdx];
-  var maxSel = q.answers.length;
+  var maxSel = getQuestionAnswers(qIdx).length;
 
   var pos = selectedOpts.indexOf(idx);
   if (pos !== -1) {
@@ -753,13 +841,14 @@ function selectOpt(idx) {
 function checkAnswer() {
   var qIdx = activeSession.qIndices[activeSession.cur];
   var q = ALL_Q[qIdx];
+  var answers = getQuestionAnswers(qIdx);
 
   var isCorrect = true;
-  if (selectedOpts.length !== q.answers.length) {
+  if (selectedOpts.length !== answers.length) {
     isCorrect = false;
   } else {
     var sortedSel = selectedOpts.slice().sort();
-    var sortedAns = q.answers.slice().sort();
+    var sortedAns = answers.slice().sort();
     for (var i = 0; i < sortedAns.length; i++) {
       if (sortedSel[i] !== sortedAns[i]) {
         isCorrect = false;
@@ -771,6 +860,7 @@ function checkAnswer() {
   var stats = getStats();
   stats[qIdx] = isCorrect;
   saveStats(stats);
+  activeSession.userAnswers[qIdx] = isCorrect;
 
   if (isCorrect) {
     activeSession.score++;
@@ -793,7 +883,7 @@ function checkAnswer() {
     for (var i = 0; i < q.opts.length; i++) {
       var el = document.getElementById('opt-' + i);
       el.onclick = null;
-      var isTargetAns = q.answers.indexOf(i) !== -1;
+      var isTargetAns = answers.indexOf(i) !== -1;
       var isUserSel = selectedOpts.indexOf(i) !== -1;
 
       if (isTargetAns) {
@@ -808,7 +898,7 @@ function checkAnswer() {
       fb.innerText = '정답입니다!';
       fb.className = 'feedback ok';
     } else {
-      var ansText = q.answers.map(function(a) { return String.fromCharCode(65 + a); }).join(', ');
+      var ansText = answers.map(function(a) { return String.fromCharCode(65 + a); }).join(', ');
       fb.innerText = '오답입니다. 정답: ' + ansText;
       fb.className = 'feedback ng';
     }
@@ -931,6 +1021,7 @@ function copyToClipboard() {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+  applyAnswerOverrides();
   var config = syncConfig();
   if (config) {
     document.getElementById('sync-repo').value = config.repo;
