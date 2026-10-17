@@ -84,6 +84,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
 
 .reset-box{border:1px dashed #7f1d1d;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .reset-title{font-size:13px;font-weight:700;color:#f87171}
+.sync-status{font-size:13px;color:var(--text2);line-height:1.5;margin-top:8px}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
 .topbar-title{font-size:18px;font-weight:700;color:var(--text)}
@@ -109,6 +110,15 @@ body{display:flex;flex-direction:column;align-items:center;padding:0}
           <span id="home-prog-pct">0%</span>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">기기 간 기록 동기화</div>
+      <div class="input-row"><span class="input-label">GitHub 저장소 (계정/저장소)</span><input type="text" id="sync-repo" class="input-field" style="width:150px;text-align:left" value="didmaehd/dudrlaxo" autocomplete="off"></div>
+      <div class="input-row"><span class="input-label">GitHub 토큰</span><input type="password" id="sync-token" class="input-field" style="width:190px;text-align:left" placeholder="Fine-grained PAT" autocomplete="off"></div>
+      <button class="btn btn-secondary" onclick="pressEffect(this); setTimeout(connectSync, 150)">저장하고 동기화</button>
+      <div class="sync-status">GitHub에서 fine-grained 토큰을 만들고 이 저장소만 선택한 뒤, Contents 권한을 읽기 및 쓰기로 설정하세요. 토큰은 이 기기의 브라우저에 저장되며, 이 저장소의 학습 기록 파일은 공개됩니다.</div>
+      <div id="sync-status" class="sync-status">동기화 미설정</div>
     </div>
 
     <div class="card">
@@ -210,6 +220,12 @@ var SESSION_KEY = 'aws_sap_session';
 var MISSED_KEY = 'aws_sap_missed';
 var NEXT_START_KEY = 'aws_sap_next_start';
 var SESSION_COUNT_KEY = 'aws_sap_session_count';
+var SYNC_CONFIG_KEY = 'aws_sap_github_sync_config';
+var SYNC_DATA_PATH = 'study-progress.json';
+var syncTimer = null;
+var syncBusy = false;
+var syncPending = false;
+var applyingRemote = false;
 
 // iOS의 file:// 실행 환경에서는 localStorage 접근이 차단될 수 있다.
 // 이 경우에도 문제 풀이는 가능하도록, 현재 열려 있는 동안만 유지되는 저장소로 대체한다.
@@ -219,7 +235,17 @@ var storage = (function() {
     var testKey = '__aws_sap_storage_test__';
     window.localStorage.setItem(testKey, '1');
     window.localStorage.removeItem(testKey);
-    return window.localStorage;
+    return {
+      getItem: function(key) { return window.localStorage.getItem(key); },
+      setItem: function(key, value) {
+        window.localStorage.setItem(key, value);
+        if (!applyingRemote && [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].indexOf(key) !== -1) scheduleSync();
+      },
+      removeItem: function(key) {
+        window.localStorage.removeItem(key);
+        if (!applyingRemote && [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].indexOf(key) !== -1) scheduleSync();
+      }
+    };
   } catch (e) {
     return {
       getItem: function(key) { return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null; },
@@ -228,6 +254,112 @@ var storage = (function() {
     };
   }
 })();
+
+function syncConfig() {
+  try { return JSON.parse(window.localStorage.getItem(SYNC_CONFIG_KEY) || 'null'); } catch (e) { return null; }
+}
+
+function syncStatus(message) {
+  var el = document.getElementById('sync-status');
+  if (el) el.innerText = message;
+}
+
+function readProgress() {
+  var data = {};
+  [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].forEach(function(key) {
+    var value = storage.getItem(key);
+    if (value !== null) data[key] = value;
+  });
+  return data;
+}
+
+function applyProgress(data) {
+  applyingRemote = true;
+  try {
+    [STATS_KEY, SESSION_KEY, MISSED_KEY, NEXT_START_KEY, SESSION_COUNT_KEY].forEach(function(key) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) window.localStorage.setItem(key, data[key]);
+      else window.localStorage.removeItem(key);
+    });
+  } finally { applyingRemote = false; }
+  showHome();
+}
+
+function githubRequest(config, method, body, sha) {
+  var url = 'https://api.github.com/repos/' + encodeURIComponent(config.repo.split('/')[0]) + '/' + encodeURIComponent(config.repo.split('/')[1]) + '/contents/' + SYNC_DATA_PATH;
+  var headers = { 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + config.token, 'X-GitHub-Api-Version': '2022-11-28' };
+  if (method === 'PUT') headers['Content-Type'] = 'application/json';
+  return fetch(url, { method: method, headers: headers, body: method === 'PUT' ? JSON.stringify({ message: 'Update study progress', content: btoa(unescape(encodeURIComponent(JSON.stringify(body, null, 2)))), sha: sha }) : undefined });
+}
+
+async function pullProgress(config) {
+  var response = await githubRequest(config, 'GET');
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('GitHub 읽기 오류 (' + response.status + ')');
+  var result = await response.json();
+  var content = decodeURIComponent(escape(atob(result.content.replace(/\n/g, ''))));
+  return { data: JSON.parse(content), sha: result.sha };
+}
+
+async function pushProgress(config, data, sha) {
+  var response = await githubRequest(config, 'PUT', data, sha);
+  if (!response.ok) {
+    var detail = await response.json().catch(function() { return {}; });
+    throw new Error('GitHub 저장 오류 (' + response.status + '): ' + (detail.message || '저장소 권한을 확인하세요.'));
+  }
+  return response.json();
+}
+
+async function syncNow() {
+  var config = syncConfig();
+  if (!config || !config.token || !config.repo) return;
+  if (syncBusy) { syncPending = true; return; }
+  syncBusy = true;
+  syncStatus('GitHub에서 기록을 확인하는 중…');
+  try {
+    var remote = await pullProgress(config);
+    if (remote) {
+      applyProgress(remote.data);
+      syncStatus('동기화 완료 · ' + new Date().toLocaleTimeString());
+    } else {
+      await pushProgress(config, readProgress(), null);
+      syncStatus('새 기록 파일을 만들었습니다. 다른 기기에서도 같은 저장소와 토큰으로 연결하세요.');
+    }
+  } catch (error) {
+    syncStatus(error.message + ' · 토큰에 Contents 읽기/쓰기 권한이 있는지 확인하세요.');
+  } finally {
+    syncBusy = false;
+    if (syncPending) { syncPending = false; scheduleSync(); }
+  }
+}
+
+function scheduleSync() {
+  if (!syncConfig()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async function() {
+    var config = syncConfig();
+    if (!config || syncBusy) { syncPending = true; return; }
+    syncBusy = true;
+    try {
+      var remote = await pullProgress(config);
+      await pushProgress(config, readProgress(), remote ? remote.sha : null);
+      syncStatus('동기화 완료 · ' + new Date().toLocaleTimeString());
+    } catch (error) {
+      syncStatus(error.message + ' · 저장 실패. 설정을 확인하고 다시 동기화하세요.');
+    } finally {
+      syncBusy = false;
+      if (syncPending) { syncPending = false; scheduleSync(); }
+    }
+  }, 700);
+}
+
+async function connectSync() {
+  var repo = document.getElementById('sync-repo').value.trim();
+  var token = document.getElementById('sync-token').value.trim() || (syncConfig() || {}).token;
+  if (!/^[^/]+\/[^/]+$/.test(repo) || !token) { alert('저장소를 계정/저장소 형식으로 입력하고 GitHub 토큰을 붙여넣으세요.'); return; }
+  var config = { repo: repo, token: token };
+  window.localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
+  await syncNow();
+}
 
 var activeSession = null;
 var selectedOpts = [];
@@ -688,6 +820,13 @@ function copyToClipboard() {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+  var config = syncConfig();
+  if (config) {
+    document.getElementById('sync-repo').value = config.repo;
+    document.getElementById('sync-token').placeholder = '이 기기에 저장된 토큰 사용 중';
+    syncStatus('연결됨 · 저장할 때 자동 동기화');
+    syncNow();
+  }
   showHome();
 });
 </script>
