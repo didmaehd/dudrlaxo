@@ -1,7 +1,7 @@
 {
-  "aws_sap_stats": "{\"48\":true,\"290\":true,\"440\":false,\"445\":true,\"565\":true,\"702\":true,\"770\":false}",
-  "aws_sap_session": "{\"mode\":\"normal\",\"qIndices\":[565,48,445,770,440,290,702,344,189,747,320,362,419,381,404,422,156,766,816,289],\"cur\":7,\"score\":5,\"instant\":true,\"isRandom\":true,\"userAnswers\":{\"48\":true,\"290\":true,\"440\":false,\"445\":true,\"565\":true,\"702\":true,\"770\":false}}",
-  "aws_sap_missed": "[770,440]",
+  "aws_sap_stats": "{\"48\":true,\"156\":true,\"189\":false,\"289\":true,\"290\":true,\"320\":true,\"344\":true,\"362\":true,\"381\":false,\"404\":false,\"419\":true,\"422\":true,\"440\":false,\"445\":true,\"565\":true,\"702\":true,\"747\":true,\"766\":false,\"770\":false,\"816\":true}",
+  "aws_sap_session": "{\"mode\":\"normal\",\"qIndices\":[565,48,445,770,440,290,702,344,189,747,320,362,419,381,404,422,156,766,816,289],\"cur\":20,\"score\":14,\"instant\":true,\"isRandom\":true,\"userAnswers\":{\"48\":true,\"156\":true,\"189\":false,\"289\":true,\"290\":true,\"320\":true,\"344\":true,\"362\":true,\"381\":false,\"404\":false,\"419\":true,\"422\":true,\"440\":false,\"445\":true,\"565\":true,\"702\":true,\"747\":true,\"766\":false,\"770\":false,\"816\":true}}",
+  "aws_sap_missed": "[770,440,189,381,404,766]",
   "aws_sap_next_start": "1",
   "aws_sap_session_count": "20"
 }
