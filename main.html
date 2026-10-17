@@ -310,6 +310,12 @@ function saveSyncBaseline(sha, data, repo) {
   window.localStorage.setItem(SYNC_BASE_REPO_KEY, repo);
 }
 
+function clearSyncBackup() {
+  window.localStorage.removeItem(SYNC_BACKUP_KEY);
+  var restoreButton = document.getElementById('sync-restore-btn');
+  if (restoreButton) restoreButton.classList.add('hidden');
+}
+
 function showConflict(config, remote, local) {
   pendingSyncConflict = { config: config, remote: remote, local: local };
   document.getElementById('sync-conflict-actions').classList.remove('hidden');
@@ -376,6 +382,7 @@ async function syncProgress() {
       } else {
         var created = await pushProgress(config, local, null);
         saveSyncBaseline(created.content.sha, local, config.repo);
+        clearSyncBackup();
         syncStatus('동기화 완료 · 서버 기록을 만들었습니다.');
       }
       return;
@@ -402,6 +409,7 @@ async function syncProgress() {
     } else if (localChanged) {
       var saved = await pushProgress(config, local, remote.sha);
       saveSyncBaseline(saved.content.sha, local, config.repo);
+      clearSyncBackup();
       syncStatus('이 기기 기록을 서버에 올렸습니다.');
     } else if (remoteChanged) {
       applyProgress(remote.data);
@@ -455,6 +463,7 @@ async function chooseLocalProgress() {
     var local = readProgress();
     var saved = await pushProgress(conflict.config, local, remote ? remote.sha : null);
     saveSyncBaseline(saved.content.sha, local, conflict.config.repo);
+    clearSyncBackup();
     pendingSyncConflict = null;
     syncStatus('이 기기 기록으로 서버 기록을 갱신했습니다.');
   } catch (error) {
