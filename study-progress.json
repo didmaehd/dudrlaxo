@@ -1,6 +1,6 @@
 {
-  "aws_sap_stats": "{\"0\":true}",
+  "aws_sap_stats": "{}",
   "aws_sap_missed": "[]",
-  "aws_sap_next_start": "2",
+  "aws_sap_next_start": "1",
   "aws_sap_session_count": "20"
 }
