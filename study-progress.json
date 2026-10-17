@@ -1,6 +1,7 @@
 {
-  "aws_sap_stats": "{}",
-  "aws_sap_missed": "[]",
+  "aws_sap_stats": "{\"48\":true,\"290\":true,\"440\":false,\"445\":true,\"565\":true,\"702\":false,\"770\":false}",
+  "aws_sap_session": "{\"mode\":\"normal\",\"qIndices\":[565,48,445,770,440,290,702,344,189,747,320,362,419,381,404,422,156,766,816,289],\"cur\":6,\"score\":4,\"instant\":true,\"isRandom\":true,\"userAnswers\":{\"48\":true,\"290\":true,\"440\":false,\"445\":true,\"565\":true,\"702\":false,\"770\":false}}",
+  "aws_sap_missed": "[770,440,702]",
   "aws_sap_next_start": "1",
   "aws_sap_session_count": "20"
 }
